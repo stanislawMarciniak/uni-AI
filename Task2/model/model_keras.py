@@ -1,31 +1,42 @@
 from tensorflow import keras
 from sklearn.metrics import classification_report
 import numpy as np
+from pprint import pprint
 
 # Load data provided by keras
 data = keras.datasets.mnist
 (x_train, y_train), (x_test, y_test) = data.load_data()
+print(x_test.shape, y_test.shape, x_train.shape, y_train.shape)
+np.set_printoptions(linewidth=1000)
+print(x_test[0])
 
 # Create model using sequential API
-model = keras.Sequential([
-    # Input Layers
-    keras.layers.Flatten(input_shape=(28, 28, )),
-	# Hidden Layers
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dropout(0.5),
-    # Output Layers
-    keras.layers.Dense(10, activation='softmax')
-])
+model = keras.Sequential(
+    [
+        # Input Layers
+        keras.layers.Flatten(
+            input_shape=(
+                28,
+                28,
+            )
+        ),
+        # Hidden Layers
+        keras.layers.Dense(128, activation="relu"),
+        keras.layers.Dense(128, activation="relu"),
+        keras.layers.Dense(128, activation="relu"),
+        keras.layers.Dense(128, activation="relu"),
+        keras.layers.Dense(128, activation="relu"),
+        keras.layers.Dropout(0.5),
+        # Output Layers
+        keras.layers.Dense(10, activation="softmax"),
+    ]
+)
 
 # Compile model
 model.compile(
-    optimizer = keras.optimizers.Adam(),
-    loss = keras.losses.SparseCategoricalCrossentropy(),
-    metrics = ['accuracy']
+    optimizer=keras.optimizers.Adam(),
+    loss=keras.losses.SparseCategoricalCrossentropy(),
+    metrics=["accuracy"],
 )
 
 # Model training
@@ -39,4 +50,4 @@ prediction = np.array([np.argmax(pred) for pred in prediction_probability])
 print(classification_report(y_test, prediction))
 
 # Save model
-model.save('mnist_classification.h5')
+model.save("mnist_classification.h5")
