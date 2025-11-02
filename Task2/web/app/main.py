@@ -31,25 +31,15 @@ def canvas():
     # Convert 3 channel image (RGB) to 1 channel image (GRAY)
     gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # CRITICAL: Invert if needed (MNIST has white digits on black background)
-    # Check if your canvas produces black on white or white on black
-    if np.mean(gray_image) > 127:  # If background is light
-        gray_image = 255 - gray_image  # Invert
-
-    # Resize with appropriate interpolation
-    gray_image = cv2.resize(gray_image, (28, 28), interpolation=cv2.INTER_AREA)
-
     # Center the digit in the frame (MNIST digits are centered)
     # Find bounding box of digit
     coords = cv2.findNonZero(gray_image.astype(np.uint8))
     if coords is not None:
         x, y, w, h = cv2.boundingRect(coords)
-        # Add padding
-        padding = 4
+
         centered = np.zeros((28, 28), dtype=np.float32)
         # Calculate centering offsets
         digit = gray_image[y : y + h, x : x + w]
-        # Resize to fit in 20x20 (leaving 4px border like MNIST)
         aspect = w / h
         if aspect > 1:
             new_w = 20
