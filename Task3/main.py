@@ -215,18 +215,18 @@ def bfs(grid, rows, columns):
     return "error: No solution found"
 
 def dfs(grid, rows, columns):
-    """Depth-first search using a stack to find the shortest solution.
+    """Depth-first search
     
-    Note: This works well for small puzzles (2x2, 3x3) but becomes impractical
-    for larger puzzles (4x4+) due to exponential state space growth.
+    DFS behavior:
+    1. Pick a direction (move), keep going deeper until you hit a dead end
+    2. When you hit a dead end (visited state or no solution), backtrack
+    3. Try the next direction from the previous state
+    4. Repeat until solution found or all paths exhausted
+
     """
-    # Queue stores (grid, path, last_move)
-    queue = deque([(grid, [], "")])
     visited = set()
     
-    while queue:
-        current_grid, current_path, last_move = queue.popleft()
-        
+    def dfs_recursive(current_grid, current_path, last_move):
         # Check if solved
         if isSolved(current_grid, rows, columns):
             return current_path
@@ -234,18 +234,17 @@ def dfs(grid, rows, columns):
         # Convert grid to tuple for visited set
         grid_tuple = tuple(tuple(row) for row in current_grid)
         
-        # Skip if already visited
+        # Dead end: already visited this state - backtrack
         if grid_tuple in visited:
-            continue
+            return None
         
-        # Mark as visited
+        # Mark as visited to prevent cycles
         visited.add(grid_tuple)
         
         # Find zero position
         zero_i, zero_j = find_zero(current_grid, rows, columns)
         
-        # Try all possible moves
-        # Move notation: L/R/U/D means a PIECE moves in that direction into the empty space
+        # Get all legal moves from current state
         moves = []
         # L: piece from RIGHT (j+1) moves LEFT into empty space
         if zero_j < columns - 1 and last_move != "R":
@@ -260,20 +259,97 @@ def dfs(grid, rows, columns):
         if zero_i > 0 and last_move != "U":
             moves.append(("D", zero_i - 1, zero_j))
         
-        # Add one valid move to queue
-        move_dir, piece_i, piece_j = random.choice(moves)
-        new_grid = copy.deepcopy(current_grid)
-        # Move the piece into the empty space
-        new_grid[zero_i][zero_j] = new_grid[piece_i][piece_j]
-        new_grid[piece_i][piece_j] = 0
-        queue.append((new_grid, current_path + [move_dir], move_dir))
+        # Try each move one at a time, going deep on first path
+        # If first path fails, backtrack and try next move
+        for move_dir, piece_i, piece_j in moves:
+            new_grid = copy.deepcopy(current_grid)
+            # Make the move
+            new_grid[zero_i][zero_j] = new_grid[piece_i][piece_j]
+            new_grid[piece_i][piece_j] = 0
+            
+            # recursively explore this path completely
+            # This will keep going deeper until it hits a dead end or finds solution
+            result = dfs_recursive(new_grid, current_path + [move_dir], move_dir)
+            if result is not None:
+                return result  # Solution found
+        
+        # BACKTRACK
+        return None
     
-    return "error: No solution found"
+    result = dfs_recursive(grid, [], "")
+    if result is None:
+        return "error: No solution found"
+    return result
 
 def idfs(grid, rows, columns):
-    """Iterative deepening DFS - not yet implemented."""
-    # TODO: Implement iterative deepening DFS
-    return "error: IDDFS not implemented"
+    """Iterative Deepening Depth-First Search (IDDFS).
+    
+    Combines the memory efficiency of DFS with the optimality of BFS.
+    Repeatedly runs DFS with increasing depth limits until solution is found.
+    Guarantees shortest solution like BFS, but uses less memory.
+    
+    Classic IDDFS: Only tracks states along current path (recursion stack),
+    not globally. This allows reaching same state via different branches for optimality.
+    """
+    
+    def dfs_with_depth_limit(current_grid, current_path, last_move, depth_limit, path_states):
+        """DFS with a depth limit - only tracks states on current path to avoid cycles."""
+        # Check if solved
+        if isSolved(current_grid, rows, columns):
+            return current_path
+        
+        # reached the depth limit
+        if len(current_path) >= depth_limit:
+            return None
+        
+        # Convert grid to tuple
+        grid_tuple = tuple(tuple(row) for row in current_grid)
+        
+        # heck if this state is already on the current path
+        if grid_tuple in path_states:
+            return None
+        
+        # Add to current path states
+        path_states.add(grid_tuple)
+        
+        # Find zero position
+        zero_i, zero_j = find_zero(current_grid, rows, columns)
+        
+        # Get all legal moves
+        moves = []
+        if zero_j < columns - 1 and last_move != "R":
+            moves.append(("L", zero_i, zero_j + 1))
+        if zero_j > 0 and last_move != "L":
+            moves.append(("R", zero_i, zero_j - 1))
+        if zero_i < rows - 1 and last_move != "D":
+            moves.append(("U", zero_i + 1, zero_j))
+        if zero_i > 0 and last_move != "U":
+            moves.append(("D", zero_i - 1, zero_j))
+        
+        # Try each move one at a time, going deep (but limited by depth_limit)
+        for move_dir, piece_i, piece_j in moves:
+            new_grid = copy.deepcopy(current_grid)
+            new_grid[zero_i][zero_j] = new_grid[piece_i][piece_j]
+            new_grid[piece_i][piece_j] = 0
+            
+            # explore this path
+            result = dfs_with_depth_limit(new_grid, current_path + [move_dir], move_dir, depth_limit, path_states)
+            if result is not None:
+                return result
+        
+        # Remove from path states when backtracking (state no longer on current path)
+        path_states.remove(grid_tuple)
+        return None
+    
+    # IDDFS: Start with depth 0, keep increasing until solution found
+    depth = 0
+    while True:
+        # Start with empty path states for each depth iteration
+        path_states = set()
+        result = dfs_with_depth_limit(grid, [], "", depth, path_states)
+        if result is not None:
+            return result
+        depth += 1
 
 def best_first(grid, rows, columns, heuristic_id):
     """Best-first search - not yet implemented."""

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sliding Puzzle Solver</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #b1b1b1 0%, #a7a7a7 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        label {
+            font-weight: bold;
+            min-width: 100px;
+        }
+        
+        input[type="number"] {
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            width: 80px;
+        }
+        
+        select {
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            flex: 1;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #427f3b;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #56cb75;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .puzzle-container {
+            display: flex;
+            justify-content: center;
+            margin: 30px 0;
+        }
+        
+        .puzzle-grid {
+            display: grid;
+            gap: 5px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+        
+        .puzzle-cell {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 24px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .puzzle-cell.empty {
+            background: #e0e0e0;
+            border: 2px dashed #999;
+        }
+        
+        .puzzle-cell.moving {
+            background: #ffeb3b;
+            transform: scale(1.1);
+        }
+        
+        .status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>15 Puzzle Solver</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Rows:</label>
+                <input type="number" id="rows" value="3" min="2" max="5">
+                <label>Columns:</label>
+                <input type="number" id="columns" value="3" min="2" max="5">
+                <button id="generateBtn" onclick="generatePuzzle()">Generate</button>
+            </div>
+            
+            <div class="control-group">
+                <label>Algorithm:</label>
+                <select id="algorithm">
+                    <option value="bfs">BFS (Breadth-First Search)</option>
+                    <option value="dfs">DFS (Depth-First Search)</option>
+                    <option value="idfs">IDDFS (Iterative Deepening DFS)</option>
+                </select>
+                <button id="solveBtn" onclick="solvePuzzle()" disabled>Solve</button>
+            </div>
+            
+            <div class="control-group">
+                <label>Mode:</label>
+                <label style="min-width: auto; font-weight: normal;">
+                    <input type="radio" name="mode" value="auto" checked onchange="toggleMode()"> Automatic
+                </label>
+                <label style="min-width: auto; font-weight: normal;">
+                    <input type="radio" name="mode" value="manual" onchange="toggleMode()"> Manual
+                </label>
+            </div>
+            
+            <div class="control-group" id="manualControls" style="display: none;">
+                <button id="prevBtn" onclick="previousMove()" disabled>Previous</button>
+                <button id="nextBtn" onclick="nextMove()" disabled>Next</button>
+            </div>
+            
+            <div class="control-group">
+                <button id="resetBtn" onclick="resetPuzzle()" disabled>Reset</button>
+            </div>
+        </div>
+        
+        <div class="puzzle-container">
+            <div id="puzzleGrid" class="puzzle-grid"></div>
+        </div>
+        
+        <div id="status" class="status info" style="display: none;"></div>
+    </div>
+
+    <script>
+        let currentGrid = null;
+        let originalGrid = null;
+        let solution = null;
+        let currentStep = 0;
+        let animationInterval = null;
+        let isAutomatic = true;
+        let solutionGrid = null; // Store grid state at each step
+        
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+        
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+        
+        function renderGrid(grid, rows, columns) {
+            const puzzleGrid = document.getElementById('puzzleGrid');
+            puzzleGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+            puzzleGrid.innerHTML = '';
+            
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < columns; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'puzzle-cell';
+                    cell.id = `cell-${i}-${j}`;
+                    const value = grid[i][j];
+                    if (value === 0) {
+                        cell.textContent = '';
+                        cell.classList.add('empty');
+                    } else {
+                        cell.textContent = value;
+                    }
+                    puzzleGrid.appendChild(cell);
+                }
+            }
+        }
+        
+        async function generatePuzzle() {
+            const rows = parseInt(document.getElementById('rows').value);
+            const columns = parseInt(document.getElementById('columns').value);
+            
+            if (rows < 2 || columns < 2 || rows > 5 || columns > 5) {
+                showStatus('Grid size must be between 2x2 and 5x5', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({rows, columns})
+                });
+                
+                const data = await response.json();
+                currentGrid = data.grid;
+                originalGrid = JSON.parse(JSON.stringify(data.grid));
+                
+                renderGrid(currentGrid, data.rows, data.columns);
+                document.getElementById('solveBtn').disabled = false;
+                document.getElementById('resetBtn').disabled = false;
+                hideStatus();
+            } catch (error) {
+                showStatus('Error generating puzzle: ' + error.message, 'error');
+            }
+        }
+        
+        async function solvePuzzle() {
+            if (!currentGrid) {
+                showStatus('Please generate a puzzle first', 'error');
+                return;
+            }
+            
+            const algorithm = document.getElementById('algorithm').value;
+            const rows = currentGrid.length;
+            const columns = currentGrid[0].length;
+            
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('solveBtn').disabled = true;
+            showStatus('Solving...', 'info');
+            
+            try {
+                const response = await fetch('/solve', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        grid: currentGrid,
+                        rows: rows,
+                        columns: columns,
+                        algorithm: algorithm
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    showStatus(data.error, 'error');
+                    document.getElementById('generateBtn').disabled = false;
+                    document.getElementById('solveBtn').disabled = false;
+                    return;
+                }
+                
+                solution = data.solution;
+                currentStep = 0;
+                
+                if (solution.length === 0) {
+                    showStatus('Puzzle is already solved!', 'success');
+                    document.getElementById('generateBtn').disabled = false;
+                    document.getElementById('solveBtn').disabled = false;
+                    return;
+                }
+                
+                // Store initial grid state
+                solutionGrid = JSON.parse(JSON.stringify(originalGrid));
+                currentStep = 0;
+                
+                // Check if automatic or manual mode
+                isAutomatic = document.querySelector('input[name="mode"]:checked').value === 'auto';
+                
+                if (isAutomatic) {
+                    showStatus(`Solution found! ${solution.length} moves. Animating...`, 'success');
+                    animateSolution();
+                } else {
+                    showStatus(`Solution found! ${solution.length} moves. Use Next/Previous to navigate.`, 'success');
+                    document.getElementById('prevBtn').disabled = true;
+                    document.getElementById('nextBtn').disabled = false;
+                    document.getElementById('generateBtn').disabled = false;
+                    document.getElementById('solveBtn').disabled = false;
+                }
+                
+            } catch (error) {
+                showStatus('Error solving puzzle: ' + error.message, 'error');
+                document.getElementById('generateBtn').disabled = false;
+                document.getElementById('solveBtn').disabled = false;
+            }
+        }
+        
+        function animateSolution() {
+            if (!solution || currentStep >= solution.length) {
+                showStatus('Solution complete!', 'success');
+                document.getElementById('generateBtn').disabled = false;
+                document.getElementById('solveBtn').disabled = false;
+                return;
+            }
+            
+            const move = solution[currentStep];
+            applyMove(move);
+            currentStep++;
+            
+            setTimeout(() => {
+                animateSolution();
+            }, 500); // 500ms delay between moves
+        }
+        
+        function toggleMode() {
+            isAutomatic = document.querySelector('input[name="mode"]:checked').value === 'auto';
+            const manualControls = document.getElementById('manualControls');
+            
+            if (isAutomatic) {
+                manualControls.style.display = 'none';
+                // If we have a solution and were in manual mode, switch to auto
+                if (solution && currentStep < solution.length) {
+                    animateSolution();
+                }
+            } else {
+                manualControls.style.display = 'flex';
+                // Stop automatic animation if running
+                if (animationInterval) {
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+            }
+        }
+        
+        function nextMove() {
+            if (!solution || currentStep >= solution.length) {
+                showStatus('Solution complete!', 'success');
+                document.getElementById('nextBtn').disabled = true;
+                return;
+            }
+            
+            const move = solution[currentStep];
+            applyMove(move);
+            currentStep++;
+            
+            // Update button states
+            document.getElementById('prevBtn').disabled = false;
+            if (currentStep >= solution.length) {
+                document.getElementById('nextBtn').disabled = true;
+                showStatus('Solution complete!', 'success');
+            }
+        }
+        
+        function previousMove() {
+            if (currentStep <= 0) {
+                document.getElementById('prevBtn').disabled = true;
+                return;
+            }
+            
+            currentStep--;
+            // Rebuild grid from start by applying all moves up to currentStep
+            currentGrid = JSON.parse(JSON.stringify(originalGrid));
+            for (let i = 0; i < currentStep; i++) {
+                applyMove(solution[i], false); // false = no animation
+            }
+            renderGrid(currentGrid, currentGrid.length, currentGrid[0].length);
+            
+            // Update button states
+            document.getElementById('nextBtn').disabled = false;
+            if (currentStep === 0) {
+                document.getElementById('prevBtn').disabled = true;
+            }
+        }
+        
+        function applyMove(move, animate = true) {
+            // Find zero position
+            let zeroRow = -1, zeroCol = -1;
+            for (let i = 0; i < currentGrid.length; i++) {
+                for (let j = 0; j < currentGrid[i].length; j++) {
+                    if (currentGrid[i][j] === 0) {
+                        zeroRow = i;
+                        zeroCol = j;
+                        break;
+                    }
+                }
+                if (zeroRow !== -1) break;
+            }
+            
+            let pieceRow = zeroRow, pieceCol = zeroCol;
+            
+            // Determine which piece moves based on move direction
+            // L: piece from RIGHT moves LEFT
+            // R: piece from LEFT moves RIGHT
+            // U: piece from BELOW moves UP
+            // D: piece from ABOVE moves DOWN
+            if (move === 'L' && zeroCol < currentGrid[0].length - 1) {
+                pieceCol = zeroCol + 1;
+            } else if (move === 'R' && zeroCol > 0) {
+                pieceCol = zeroCol - 1;
+            } else if (move === 'U' && zeroRow < currentGrid.length - 1) {
+                pieceRow = zeroRow + 1;
+            } else if (move === 'D' && zeroRow > 0) {
+                pieceRow = zeroRow - 1;
+            }
+            
+            // Highlight moving piece (only if animating)
+            if (animate) {
+                const pieceCell = document.getElementById(`cell-${pieceRow}-${pieceCol}`);
+                if (pieceCell) {
+                    pieceCell.classList.add('moving');
+                    setTimeout(() => pieceCell.classList.remove('moving'), 300);
+                }
+            }
+            
+            // Swap values
+            const temp = currentGrid[zeroRow][zeroCol];
+            currentGrid[zeroRow][zeroCol] = currentGrid[pieceRow][pieceCol];
+            currentGrid[pieceRow][pieceCol] = temp;
+            
+            // Update display
+            renderGrid(currentGrid, currentGrid.length, currentGrid[0].length);
+        }
+        
+        function resetPuzzle() {
+            if (originalGrid) {
+                currentGrid = JSON.parse(JSON.stringify(originalGrid));
+                renderGrid(currentGrid, currentGrid.length, currentGrid[0].length);
+                solution = null;
+                currentStep = 0;
+                document.getElementById('generateBtn').disabled = false;
+                document.getElementById('solveBtn').disabled = false;
+                document.getElementById('prevBtn').disabled = true;
+                document.getElementById('nextBtn').disabled = true;
+                if (animationInterval) {
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+                hideStatus();
+            }
+        }
+    </script>
+</body>
+</html>
+
