@@ -6,10 +6,16 @@ import time
 
 def main():
     # Parse arguments
-    parser = argparse.ArgumentParser(description='Process some attributes.')
+    parser = argparse.ArgumentParser(description='Process some attributes.', add_help=False)
     parser.add_argument('-r', '--rows', type=int, help='row count')
     parser.add_argument('-c', '--columns', type=int, help='column count')
     parser.add_argument('-b', '--bfs', action='store_true', help='breadth first search')
+    parser.add_argument('-d', '--dfs', action='store_true', help='depth first search')
+    parser.add_argument('-i', '--idfs', action='store_true', help='iterative deepening DFS')
+    parser.add_argument('-h', '--bf', type=int, metavar='id_of_heuristic', help='best-first strategy')
+    parser.add_argument('-a', '--astar', type=int, metavar='id_of_heuristic', help='A* strategy')
+    parser.add_argument('-s', '--sma', type=int, metavar='id_of_heuristic', help='SMA* strategy')
+    parser.add_argument('--help', action='help', default=argparse.SUPPRESS, help='show this help message and exit')
     args = parser.parse_args()
 
     # Default values if not specified on input
@@ -22,7 +28,7 @@ def main():
         args.columns = 3
     print()
 
-    # Values
+    # Set Values
     rows = args.rows
     columns = args.columns
     grid = generateSolvableGrid(rows, columns)
@@ -32,7 +38,50 @@ def main():
     # Print the grid
     print("Randomly generated grid:")
     print()
+    printGrid(grid, rows, columns)
 
+    timeStart = time.time()
+    if args.bfs:
+        print("Breadth first search solution:")
+        print()
+        result = bfs(grid, rows, columns)
+        print(result)
+        print()
+    elif args.dfs:
+        print("Depth first search solution:")
+        print()
+        result = dfs(grid, rows, columns)
+        print(result)
+        print()
+    elif args.idfs:
+        print("Iterative deepening DFS solution:")
+        print()
+        result = idfs(grid, rows, columns)
+        print(result)
+        print()
+    elif args.bf is not None:
+        print(f"Best-first search solution (heuristic {args.bf}):")
+        print()
+        result = best_first(grid, rows, columns, args.bf)
+        print(result)
+        print()
+    elif args.astar is not None:
+        print(f"A* search solution (heuristic {args.astar}):")
+        print()
+        result = astar(grid, rows, columns, args.astar)
+        print(result)
+        print()
+    elif args.sma is not None:
+        print(f"SMA* search solution (heuristic {args.sma}):")
+        print()
+        result = sma(grid, rows, columns, args.sma)
+        print(result)
+        print()
+    timeEnd = time.time()
+    print(f"Time taken: {timeEnd - timeStart} seconds")
+    print(f"Length of solution: {len(result)}")
+
+def printGrid(grid, rows, columns):
     for i in range(rows):
         for j in range (columns):
             if grid[i][j] < 10:
@@ -45,17 +94,13 @@ def main():
         print()
     print()
 
-    timeStart = time.time()
-    if args.bfs:
-        print("Breadth first search solution:")
-        print()
-        result = bfs(grid, rows, columns, [], None)
-        print(result)
-        print()
-    timeEnd = time.time()
-    print(f"Time taken: {timeEnd - timeStart} seconds")
-
-    
+def find_zero(grid, rows, columns):
+    """Find the position of the zero (empty space) in the grid."""
+    for i in range(rows):
+        for j in range(columns):
+            if grid[i][j] == 0:
+                return i, j
+    raise ValueError("No zero in grid")
 
 def generateSolvableGrid(rows, columns):
     """Generate a solvable puzzle by starting from solved state and making random moves."""
@@ -70,84 +115,35 @@ def generateSolvableGrid(rows, columns):
                 row.append(i * columns + j + 1)
         grid.append(row)
     
-    # Make random valid moves to shuffle (using recursion)
+    # Make random valid moves to shuffle
     num_moves = random.randint(50, 200)  # Number of random moves to make
     return shuffleGrid(grid, rows, columns, num_moves)
 
-def shuffleGrid(grid, rows, columns, moves_remaining):
-    """Recursively shuffle grid by making random valid moves."""
-    if moves_remaining == 0:
-        return grid
+def shuffleGrid(grid, rows, columns, num_moves):
+    """Shuffle grid by making random valid moves. Guarantees solvability."""
+    zero_i, zero_j = rows - 1, columns - 1  # Start from solved position (bottom-right)
     
-    # Find zero position
-    zero_i, zero_j = 0, 0
-    for i in range(rows):
-        for j in range(columns):
-            if grid[i][j] == 0:
-                zero_i, zero_j = i, j
-                break
-    
-    # Get all possible moves
-    possible_moves = []
-    if zero_i > 0:
-        possible_moves.append("U")  # Move zero up
-    if zero_i < rows - 1:
-        possible_moves.append("D")  # Move zero down
-    if zero_j > 0:
-        possible_moves.append("L")  # Move zero left
-    if zero_j < columns - 1:
-        possible_moves.append("R")  # Move zero right
-    
-    # Make a random move
-    if possible_moves:
-        move = random.choice(possible_moves)
-        new_grid = copy.deepcopy(grid)
+    for _ in range(num_moves):
+        possible_moves = []
+        # L: piece from RIGHT (j+1) moves LEFT into empty space
+        if zero_j < columns - 1:
+            possible_moves.append(("L", zero_i, zero_j + 1))
+        # R: piece from LEFT (j-1) moves RIGHT into empty space
+        if zero_j > 0:
+            possible_moves.append(("R", zero_i, zero_j - 1))
+        # U: piece from BELOW (i+1) moves UP into empty space
+        if zero_i < rows - 1:
+            possible_moves.append(("U", zero_i + 1, zero_j))
+        # D: piece from ABOVE (i-1) moves DOWN into empty space
+        if zero_i > 0:
+            possible_moves.append(("D", zero_i - 1, zero_j))
         
-        if move == "U":
-            new_grid[zero_i][zero_j] = new_grid[zero_i - 1][zero_j]
-            new_grid[zero_i - 1][zero_j] = 0
-        elif move == "D":
-            new_grid[zero_i][zero_j] = new_grid[zero_i + 1][zero_j]
-            new_grid[zero_i + 1][zero_j] = 0
-        elif move == "L":
-            new_grid[zero_i][zero_j] = new_grid[zero_i][zero_j - 1]
-            new_grid[zero_i][zero_j - 1] = 0
-        elif move == "R":
-            new_grid[zero_i][zero_j] = new_grid[zero_i][zero_j + 1]
-            new_grid[zero_i][zero_j + 1] = 0
-        
-        # Recursively continue shuffling
-        return shuffleGrid(new_grid, rows, columns, moves_remaining - 1)
+        move_dir, piece_i, piece_j = random.choice(possible_moves)
+        # Swap in-place: move piece into empty space
+        grid[zero_i][zero_j], grid[piece_i][piece_j] = grid[piece_i][piece_j], grid[zero_i][zero_j]
+        zero_i, zero_j = piece_i, piece_j
     
     return grid
-
-def isSolvable(grid, rows, columns):
-    """Check if a sliding puzzle configuration is solvable."""
-    # Flatten the grid (excluding 0) and count inversions
-    flat = []
-    zero_row = 0
-    for i in range(rows):
-        for j in range(columns):
-            if grid[i][j] != 0:
-                flat.append(grid[i][j])
-            else:
-                zero_row = i
-    
-    # Count inversions (pairs where a larger number comes before a smaller number)
-    inversions = 0
-    for i in range(len(flat)):
-        for j in range(i + 1, len(flat)):
-            if flat[i] > flat[j]:
-                inversions += 1
-    
-    # For a puzzle to be solvable:
-    # - If grid width is odd: inversions must be even
-    # - If grid width is even: (inversions + distance of zero from bottom) must be even
-    if columns % 2 == 1:
-        return inversions % 2 == 0
-    else:
-        distance_from_bottom = rows - 1 - zero_row
-        return (inversions + distance_from_bottom) % 2 == 0
 
 def isSolved(grid, rows, columns):
     for i in range(rows):
@@ -162,8 +158,12 @@ def isSolved(grid, rows, columns):
                     return False
     return True
 
-def bfs(grid, rows, columns, path, visited):
-    """Breadth-first search using a queue to find the shortest solution."""
+def bfs(grid, rows, columns):
+    """Breadth-first search using a queue to find the shortest solution.
+    
+    Note: This works well for small puzzles (2x2, 3x3) but becomes impractical
+    for larger puzzles (4x4+) due to exponential state space growth.
+    """
     # Queue stores (grid, path, last_move)
     queue = deque([(grid, [], "")])
     visited = set()
@@ -186,33 +186,109 @@ def bfs(grid, rows, columns, path, visited):
         visited.add(grid_tuple)
         
         # Find zero position
-        zero_i, zero_j = 0, 0
-        for i in range(rows):
-            for j in range(columns):
-                if current_grid[i][j] == 0:
-                    zero_i, zero_j = i, j
-                    break
+        zero_i, zero_j = find_zero(current_grid, rows, columns)
         
         # Try all possible moves
+        # Move notation: L/R/U/D means a PIECE moves in that direction into the empty space
         moves = []
-        if zero_i > 0 and last_move != "D":
-            moves.append(("U", zero_i - 1, zero_j))
-        if zero_i < rows - 1 and last_move != "U":
-            moves.append(("D", zero_i + 1, zero_j))
-        if zero_j > 0 and last_move != "R":
-            moves.append(("L", zero_i, zero_j - 1))
-        if zero_j < columns - 1 and last_move != "L":
-            moves.append(("R", zero_i, zero_j + 1))
+        # L: piece from RIGHT (j+1) moves LEFT into empty space
+        if zero_j < columns - 1 and last_move != "R":
+            moves.append(("L", zero_i, zero_j + 1))
+        # R: piece from LEFT (j-1) moves RIGHT into empty space
+        if zero_j > 0 and last_move != "L":
+            moves.append(("R", zero_i, zero_j - 1))
+        # U: piece from BELOW (i+1) moves UP into empty space
+        if zero_i < rows - 1 and last_move != "D":
+            moves.append(("U", zero_i + 1, zero_j))
+        # D: piece from ABOVE (i-1) moves DOWN into empty space
+        if zero_i > 0 and last_move != "U":
+            moves.append(("D", zero_i - 1, zero_j))
         
         # Add all valid moves to queue
-        for move_dir, new_i, new_j in moves:
+        for move_dir, piece_i, piece_j in moves:
             new_grid = copy.deepcopy(current_grid)
-            # Swap zero with the adjacent cell
-            new_grid[zero_i][zero_j] = new_grid[new_i][new_j]
-            new_grid[new_i][new_j] = 0
+            # Move the piece into the empty space
+            new_grid[zero_i][zero_j] = new_grid[piece_i][piece_j]
+            new_grid[piece_i][piece_j] = 0
             queue.append((new_grid, current_path + [move_dir], move_dir))
     
     return "error: No solution found"
+
+def dfs(grid, rows, columns):
+    """Depth-first search using a stack to find the shortest solution.
+    
+    Note: This works well for small puzzles (2x2, 3x3) but becomes impractical
+    for larger puzzles (4x4+) due to exponential state space growth.
+    """
+    # Queue stores (grid, path, last_move)
+    queue = deque([(grid, [], "")])
+    visited = set()
+    
+    while queue:
+        current_grid, current_path, last_move = queue.popleft()
+        
+        # Check if solved
+        if isSolved(current_grid, rows, columns):
+            return current_path
+        
+        # Convert grid to tuple for visited set
+        grid_tuple = tuple(tuple(row) for row in current_grid)
+        
+        # Skip if already visited
+        if grid_tuple in visited:
+            continue
+        
+        # Mark as visited
+        visited.add(grid_tuple)
+        
+        # Find zero position
+        zero_i, zero_j = find_zero(current_grid, rows, columns)
+        
+        # Try all possible moves
+        # Move notation: L/R/U/D means a PIECE moves in that direction into the empty space
+        moves = []
+        # L: piece from RIGHT (j+1) moves LEFT into empty space
+        if zero_j < columns - 1 and last_move != "R":
+            moves.append(("L", zero_i, zero_j + 1))
+        # R: piece from LEFT (j-1) moves RIGHT into empty space
+        if zero_j > 0 and last_move != "L":
+            moves.append(("R", zero_i, zero_j - 1))
+        # U: piece from BELOW (i+1) moves UP into empty space
+        if zero_i < rows - 1 and last_move != "D":
+            moves.append(("U", zero_i + 1, zero_j))
+        # D: piece from ABOVE (i-1) moves DOWN into empty space
+        if zero_i > 0 and last_move != "U":
+            moves.append(("D", zero_i - 1, zero_j))
+        
+        # Add one valid move to queue
+        move_dir, piece_i, piece_j = random.choice(moves)
+        new_grid = copy.deepcopy(current_grid)
+        # Move the piece into the empty space
+        new_grid[zero_i][zero_j] = new_grid[piece_i][piece_j]
+        new_grid[piece_i][piece_j] = 0
+        queue.append((new_grid, current_path + [move_dir], move_dir))
+    
+    return "error: No solution found"
+
+def idfs(grid, rows, columns):
+    """Iterative deepening DFS - not yet implemented."""
+    # TODO: Implement iterative deepening DFS
+    return "error: IDDFS not implemented"
+
+def best_first(grid, rows, columns, heuristic_id):
+    """Best-first search - not yet implemented."""
+    # TODO: Implement best-first search with given heuristic
+    return f"error: Best-first search with heuristic {heuristic_id} not implemented"
+
+def astar(grid, rows, columns, heuristic_id):
+    """A* search - not yet implemented."""
+    # TODO: Implement A* search with given heuristic
+    return f"error: A* search with heuristic {heuristic_id} not implemented"
+
+def sma(grid, rows, columns, heuristic_id):
+    """SMA* search - not yet implemented."""
+    # TODO: Implement SMA* search with given heuristic
+    return f"error: SMA* search with heuristic {heuristic_id} not implemented"
 
 if __name__ == "__main__":
     main()
