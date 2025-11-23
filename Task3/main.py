@@ -4,6 +4,8 @@ import copy
 from collections import deque
 import time
 import heapq
+import signal
+from contextlib import contextmanager
 
 
 def main():
@@ -11,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Process some attributes.", add_help=False
     )
+    parser.add_argument("--test", action="store_true", help="run algorithm tests")
     parser.add_argument("-r", "--rows", type=int, help="row count")
     parser.add_argument("-c", "--columns", type=int, help="column count")
     parser.add_argument("-b", "--bfs", action="store_true", help="breadth first search")
@@ -35,6 +38,9 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.test:
+        test_all_algorithms()
+        return
     # Default values if not specified on input
     print()
     if args.rows is None:
@@ -613,6 +619,231 @@ def sma(grid, rows, columns, heuristic_id, max_nodes=50000):
             counter += 1
 
     return []
+
+
+class TimeoutException(Exception):
+    pass
+
+
+@contextmanager
+def time_limit(seconds):
+    """Context manager for timeout on Unix systems"""
+
+    def signal_handler(signum, frame):
+        raise TimeoutException("Timed out!")
+
+    # Check if signal is available (Unix systems)
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(seconds)
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+    else:
+        # Fallback for Windows - no timeout
+        yield
+
+
+def test_all_algorithms():
+    """Test all algorithms on random grids and compare performance."""
+
+    # Configuration
+    test_configs = [
+        (2, 2, 10),  # 10 grids of 2x2
+        (3, 3, 10),  # 10 grids of 3x3
+        (4, 4, 10),  # 10 grids of 4x4
+    ]
+
+    timeout_seconds = 5
+
+    # Algorithms to test
+    algorithms = [
+        ("BFS", lambda g, r, c: bfs(g, r, c)),
+        ("DFS", lambda g, r, c: dfs(g, r, c)),
+        ("IDFS", lambda g, r, c: idfs(g, r, c)),
+        ("Best-First (h=0)", lambda g, r, c: best_first(g, r, c, 0)),
+        ("Best-First (h=1)", lambda g, r, c: best_first(g, r, c, 1)),
+        ("Best-First (h=2)", lambda g, r, c: best_first(g, r, c, 2)),
+        ("A* (h=0)", lambda g, r, c: astar(g, r, c, 0)),
+        ("A* (h=1)", lambda g, r, c: astar(g, r, c, 1)),
+        ("A* (h=2)", lambda g, r, c: astar(g, r, c, 2)),
+        ("SMA* (h=0)", lambda g, r, c: sma(g, r, c, 0)),
+        ("SMA* (h=1)", lambda g, r, c: sma(g, r, c, 1)),
+        ("SMA* (h=2)", lambda g, r, c: sma(g, r, c, 2)),
+    ]
+
+    # Generate all test grids
+    print("Generating test grids...")
+    all_grids = []
+    for rows, cols, count in test_configs:
+        for i in range(count):
+            grid = generateSolvableGrid(rows, cols)
+            all_grids.append((rows, cols, grid, f"{rows}x{cols}-{i+1}"))
+
+    print(f"Generated {len(all_grids)} test grids\n")
+
+    # Results storage
+    results = {algo_name: [] for algo_name, _ in algorithms}
+
+    # Test each algorithm on each grid
+    for grid_idx, (rows, cols, grid, grid_name) in enumerate(all_grids):
+        print(f"Testing grid {grid_idx + 1}/{len(all_grids)}: {grid_name}")
+
+        for algo_name, algo_func in algorithms:
+            try:
+                start_time = time.time()
+
+                # Try to run with timeout
+                with time_limit(timeout_seconds):
+                    result = algo_func(copy.deepcopy(grid), rows, cols)
+
+                elapsed_time = (time.time() - start_time) * 1000  # in milliseconds
+
+                # Check if solution found
+                if result and len(result) > 0 and result != "error: No solution found":
+                    results[algo_name].append(
+                        {
+                            "grid": grid_name,
+                            "moves": len(result),
+                            "time": elapsed_time,
+                            "status": "solved",
+                        }
+                    )
+                else:
+                    results[algo_name].append(
+                        {
+                            "grid": grid_name,
+                            "moves": None,
+                            "time": elapsed_time,
+                            "status": "no solution",
+                        }
+                    )
+
+            except TimeoutException:
+                results[algo_name].append(
+                    {
+                        "grid": grid_name,
+                        "moves": None,
+                        "time": timeout_seconds * 1000,  # in milliseconds
+                        "status": "timeout",
+                    }
+                )
+            except Exception as e:
+                results[algo_name].append(
+                    {
+                        "grid": grid_name,
+                        "moves": None,
+                        "time": None,
+                        "status": f"error: {str(e)[:20]}",
+                    }
+                )
+
+        print(f"  Completed grid {grid_name}\n")
+
+    # Print results
+    print_results(results, test_configs)
+
+
+def print_results(results, test_configs):
+    """Print comprehensive comparison of algorithm performance."""
+
+    print("\n" + "=" * 100)
+    print("ALGORITHM PERFORMANCE COMPARISON")
+    print("=" * 100)
+
+    # Summary statistics by grid size
+    for rows, cols, count in test_configs:
+        grid_size = f"{rows}x{cols}"
+        print(f"\n{grid_size} Grids Summary:")
+        print("-" * 100)
+
+        # Header
+        print(
+            f"{'Algorithm':<20} {'Solved':<10} {'Avg Moves':<12} {'Avg Time (ms)':<15} {'Timeouts':<10}"
+        )
+        print("-" * 100)
+
+        for algo_name in results.keys():
+            # Filter results for this grid size
+            grid_results = [
+                r for r in results[algo_name] if r["grid"].startswith(grid_size)
+            ]
+
+            solved_count = sum(1 for r in grid_results if r["status"] == "solved")
+            timeout_count = sum(1 for r in grid_results if r["status"] == "timeout")
+
+            # Calculate averages only for solved instances
+            solved_results = [r for r in grid_results if r["status"] == "solved"]
+            avg_moves = (
+                sum(r["moves"] for r in solved_results) / len(solved_results)
+                if solved_results
+                else 0
+            )
+            avg_time = (
+                sum(r["time"] for r in solved_results) / len(solved_results)
+                if solved_results
+                else 0
+            )
+
+            print(
+                f"{algo_name:<20} {solved_count}/{count:<8} {avg_moves:<12.1f} {avg_time:<15.4f} {timeout_count:<10}"
+            )
+
+    # Detailed results table
+    print("\n" + "=" * 100)
+    print("DETAILED RESULTS BY GRID")
+    print("=" * 100)
+
+    # Get all grid names
+    grid_names = [r["grid"] for r in results[list(results.keys())[0]]]
+
+    for grid_name in grid_names:
+        print(f"\nGrid: {grid_name}")
+        print("-" * 100)
+        print(f"{'Algorithm':<20} {'Moves':<10} {'Time (ms)':<12} {'Status':<20}")
+        print("-" * 100)
+
+        for algo_name in results.keys():
+            result = next(r for r in results[algo_name] if r["grid"] == grid_name)
+
+            moves_str = str(result["moves"]) if result["moves"] is not None else "-"
+            time_str = f"{result['time']:.4f}" if result["time"] is not None else "-"
+            status_str = result["status"]
+
+            print(f"{algo_name:<20} {moves_str:<10} {time_str:<12} {status_str:<20}")
+
+    # Overall winner summary
+    print("\n" + "=" * 100)
+    print("OVERALL PERFORMANCE SUMMARY")
+    print("=" * 100)
+
+    print(
+        f"\n{'Algorithm':<20} {'Total Solved':<15} {'Avg Moves':<15} {'Avg Time (ms)':<15}"
+    )
+    print("-" * 100)
+
+    for algo_name in results.keys():
+        all_results = results[algo_name]
+        solved_count = sum(1 for r in all_results if r["status"] == "solved")
+
+        solved_results = [r for r in all_results if r["status"] == "solved"]
+        avg_moves = (
+            sum(r["moves"] for r in solved_results) / len(solved_results)
+            if solved_results
+            else 0
+        )
+        avg_time = (
+            sum(r["time"] for r in solved_results) / len(solved_results)
+            if solved_results
+            else 0
+        )
+
+        print(
+            f"{algo_name:<20} {solved_count}/{len(all_results):<13} {avg_moves:<15.1f} {avg_time:<15.4f}"
+        )
+
+    print("\n" + "=" * 100)
 
 
 if __name__ == "__main__":
